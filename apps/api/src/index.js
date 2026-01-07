@@ -1,33 +1,44 @@
 import express from "express";
 import cors from "cors";
+import { pool } from "./services/db.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// rota de saúde
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+// Health check com banco
+app.get("/health", async (req, res) => {
+  const result = await pool.query("SELECT 1");
+  res.json({ status: "ok", db: true });
 });
 
-// dados em memória (temporário)
-const linhas = [];
+// Cria tabela automaticamente
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS linhas (
+    id SERIAL PRIMARY KEY,
+    numero VARCHAR(20),
+    operadora VARCHAR(20),
+    status VARCHAR(20),
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+`);
 
-// criar linha
-app.post("/linhas", (req, res) => {
-  const linha = {
-    id: Date.now(),
-    ...req.body,
-    created_at: new Date()
-  };
+app.post("/linhas", async (req, res) => {
+  const { numero, operadora, status } = req.body;
 
-  linhas.push(linha);
-  res.status(201).json(linha);
+  const result = await pool.query(
+    `INSERT INTO linhas (numero, operadora, status)
+     VALUES ($1, $2, $3)
+     RETURNING *`,
+    [numero, operadora, status]
+  );
+
+  res.status(201).json(result.rows[0]);
 });
 
-// listar linhas
-app.get("/linhas", (req, res) => {
-  res.json(linhas);
+app.get("/linhas", async (req, res) => {
+  const result = await pool.query("SELECT * FROM linhas");
+  res.json(result.rows);
 });
 
 app.listen(3000, () => {

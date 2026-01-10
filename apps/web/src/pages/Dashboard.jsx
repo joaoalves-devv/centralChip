@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
-import { getLinhas, createLinha, deleteLinha, updateLinha } from "../services/api";
+import {
+  getLinhas,
+  createLinha,
+  deleteLinha,
+  updateLinha,
+} from "../services/api";
 
 export default function Dashboard() {
   const [linhas, setLinhas] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const [numero, setNumero] = useState("");
-  const [operadora, setOperadora] = useState("");
-  const [status, setStatus] = useState("");
+  const [form, setForm] = useState({
+    numero: "",
+    operadora: "",
+    status: "ativa",
+  });
 
   const [editId, setEditId] = useState(null);
 
@@ -28,34 +35,33 @@ export default function Dashboard() {
     carregarLinhas();
   }, []);
 
-  // Criar linha
-  async function handleCreate(e) {
-  e.preventDefault();
+  async function handleSubmit(e) {
+    e.preventDefault();
 
-  console.log("editId:", editId);
+    if (!form.numero || !form.operadora || !form.status) {
+      alert("Preencha todos os campos");
+      return;
+    }
 
-  if (!numero || !operadora || !status) {
-    alert("Preencha todos os campos");
-    return;
+    try {
+      setLoading(true);
+
+      if (editId) {
+        await updateLinha(editId, form);
+      } else {
+        await createLinha(form);
+      }
+
+      setForm({ numero: "", operadora: "", status: "ativa" });
+      setEditId(null);
+      await carregarLinhas();
+    } catch (err) {
+      alert("Erro ao salvar linha");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (editId) {
-    console.log("CHAMANDO UPDATE");
-    await updateLinha(editId, { numero, operadora, status });
-  } else {
-    console.log("CHAMANDO CREATE");
-    await createLinha({ numero, operadora, status });
-  }
-
-  setNumero("");
-  setOperadora("");
-  setStatus("");
-  setEditId(null);
-  carregarLinhas();
-}
-
-
-  // Deletar linha
   async function handleDelete(id) {
     if (!confirm("Deseja excluir esta linha?")) return;
     await deleteLinha(id);
@@ -66,60 +72,85 @@ export default function Dashboard() {
     <div style={{ padding: 20 }}>
       <h2>Dashboard</h2>
 
-      <form onSubmit={handleCreate} style={{ marginBottom: 20 }}>
+      {/* FORMULÁRIO CREATE / UPDATE */}
+      <form onSubmit={handleSubmit} style={{ marginBottom: 20 }}>
         <input
           placeholder="Número"
-          value={numero}
-          onChange={(e) => setNumero(e.target.value)}
+          value={form.numero}
+          onChange={(e) =>
+            setForm({ ...form, numero: e.target.value })
+          }
         />
 
-        <select value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">Selecione o status</option>
+        <input
+          placeholder="Operadora"
+          value={form.operadora}
+          onChange={(e) =>
+            setForm({ ...form, operadora: e.target.value })
+          }
+        />
+
+        <select
+          value={form.status}
+          onChange={(e) =>
+            setForm({ ...form, status: e.target.value })
+          }
+        >
           <option value="ativa">Ativa</option>
           <option value="suspensa">Suspensa</option>
           <option value="cancelada">Cancelada</option>
         </select>
 
-        <input
-          placeholder="Operadora"
-          value={operadora}
-          onChange={(e) => setOperadora(e.target.value)}
-        />
-       {/* Botão para criar linha */}
-      <button type="submit">
-        {editId ? "Atualizar linha" : "Criar linha"}
-      </button>
+        <button type="submit" disabled={loading}>
+          {editId ? "Atualizar" : "Criar"}
+        </button>
+
+        {editId && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditId(null);
+              setForm({
+                numero: "",
+                operadora: "",
+                status: "ativa",
+              });
+            }}
+          >
+            Cancelar
+          </button>
+        )}
       </form>
 
       {loading && <p>Carregando...</p>}
 
-      {!loading && linhas.length === 0 && <p>Nenhuma linha cadastrada</p>}
+      {!loading && linhas.length === 0 && (
+        <p>Nenhuma linha cadastrada</p>
+      )}
 
       {!loading && linhas.length > 0 && (
         <ul>
           {linhas.map((linha) => (
             <li key={linha.id}>
               {linha.numero} — {linha.operadora} — {linha.status}
-              <button
-              style={{ marginLeft: 10 }}
-              onClick={() => {
-                setEditId(linha.id);
-                setNumero(linha.numero);
-                setOperadora(linha.operadora);
-                setStatus(linha.status);
-              }}
-            >
-              Editar
-            </button>
 
               <button
-                style={{ marginLeft: 10 }}
-                onClick={() => handleDelete(linha.id)}
+                onClick={() => {
+                  setEditId(linha.id);
+                  setForm({
+                    numero: linha.numero,
+                    operadora: linha.operadora,
+                    status: linha.status,
+                  });
+                }}
               >
+                Editar
+              </button>
+
+              <button onClick={() => handleDelete(linha.id)}>
                 Excluir
               </button>
             </li>
-
           ))}
         </ul>
       )}

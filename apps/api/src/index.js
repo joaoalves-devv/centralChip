@@ -8,39 +8,76 @@ app.use(express.json());
 
 // Health check com banco
 app.get("/health", async (req, res) => {
-  const result = await pool.query("SELECT 1");
-  res.json({ status: "ok", db: true });
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "ok", db: true });
+  } catch (err) {
+    res.status(500).json({ status: "error", db: false });
+  }
+}); 
+
+// GET /linhas - busca todas as linhas
+app.get("/linhas", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM linhas ORDER BY id ASC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+  console.error("ERRO AO BUSCAR LINHAS:", err.message);
+  res.status(500).json({
+    error: "Erro ao buscar linhas",
+    detail: err.message
+  });
+}
 });
 
-// Cria tabela automaticamente
-await pool.query(`
-  CREATE TABLE IF NOT EXISTS linhas (
-    id SERIAL PRIMARY KEY,
-    numero VARCHAR(20),
-    operadora VARCHAR(20),
-    status VARCHAR(20),
-    created_at TIMESTAMP DEFAULT NOW()
-  );
-`);
-
+// POST /linhas - cria nova linha
 app.post("/linhas", async (req, res) => {
   const { numero, operadora, status } = req.body;
 
-  const result = await pool.query(
-    `INSERT INTO linhas (numero, operadora, status)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
-    [numero, operadora, status]
-  );
+  if (!numero || !operadora || !status) {
+    return res.status(400).json({ error: "Campos obrigatórios ausentes" });
+  }
 
-  res.status(201).json(result.rows[0]);
+  try {
+    const result = await pool.query(
+      `INSERT INTO linhas (numero, operadora, status)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [numero, operadora, status]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao criar linha" });
+  }
 });
 
-app.get("/linhas", async (req, res) => {
-  const result = await pool.query("SELECT * FROM linhas");
-  res.json(result.rows);
+// DELETE /linhas/:id - remove uma linha
+app.delete("/linhas/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      "DELETE FROM linhas WHERE id = $1 RETURNING *",
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Linha não encontrada" });
+    }
+
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao deletar linha" });
+  }
 });
 
-app.listen(3000, () => {
-  console.log("API rodando na porta 3000");
+// Inicia o servidor
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`API rodando na porta ${PORT}`);
 });

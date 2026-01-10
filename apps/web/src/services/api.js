@@ -19,3 +19,13 @@ export async function deleteLinha(id) {
     method: "DELETE",
   });
 }
+
+export async function updateLinha(id, data) {
+  const res = await fetch(`${API_URL}/linhas/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+

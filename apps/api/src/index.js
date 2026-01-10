@@ -14,7 +14,7 @@ app.get("/health", async (req, res) => {
   } catch (err) {
     res.status(500).json({ status: "error", db: false });
   }
-}); 
+});  
 
 // GET /linhas - busca todas as linhas
 app.get("/linhas", async (req, res) => {
@@ -73,6 +73,35 @@ app.delete("/linhas/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao deletar linha" });
+  }
+});
+
+// PUT /linhas/:id - atualiza uma linha
+app.put("/linhas/:id", async (req, res) => {
+  const { id } = req.params;
+  const { numero, operadora, status } = req.body;
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE linhas
+      SET numero = $1,
+          operadora = $2,
+          status = $3
+      WHERE id = $4
+      RETURNING *
+      `,
+      [numero, operadora, status, id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Linha não encontrada" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("ERRO AO ATUALIZAR LINHA:", err.message);
+    res.status(500).json({ error: "Erro ao atualizar linha" });
   }
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getLinhas, createLinha, deleteLinha } from "../services/api";
+import { getLinhas, createLinha, deleteLinha, updateLinha } from "../services/api";
 
 export default function Dashboard() {
   const [linhas, setLinhas] = useState([]);
@@ -8,6 +8,8 @@ export default function Dashboard() {
   const [numero, setNumero] = useState("");
   const [operadora, setOperadora] = useState("");
   const [status, setStatus] = useState("");
+
+  const [editId, setEditId] = useState(null);
 
   async function carregarLinhas() {
     setLoading(true);
@@ -28,13 +30,30 @@ export default function Dashboard() {
 
   // Criar linha
   async function handleCreate(e) {
-    e.preventDefault();
-    await createLinha({ numero, operadora, status });
-    setNumero("");
-    setOperadora("");
-    setStatus("");
-    carregarLinhas();
+  e.preventDefault();
+
+  console.log("editId:", editId);
+
+  if (!numero || !operadora || !status) {
+    alert("Preencha todos os campos");
+    return;
   }
+
+  if (editId) {
+    console.log("CHAMANDO UPDATE");
+    await updateLinha(editId, { numero, operadora, status });
+  } else {
+    console.log("CHAMANDO CREATE");
+    await createLinha({ numero, operadora, status });
+  }
+
+  setNumero("");
+  setOperadora("");
+  setStatus("");
+  setEditId(null);
+  carregarLinhas();
+}
+
 
   // Deletar linha
   async function handleDelete(id) {
@@ -53,17 +72,23 @@ export default function Dashboard() {
           value={numero}
           onChange={(e) => setNumero(e.target.value)}
         />
+
+        <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">Selecione o status</option>
+          <option value="ativa">Ativa</option>
+          <option value="suspensa">Suspensa</option>
+          <option value="cancelada">Cancelada</option>
+        </select>
+
         <input
           placeholder="Operadora"
           value={operadora}
           onChange={(e) => setOperadora(e.target.value)}
         />
-        <input
-          placeholder="Status"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        />
-        <button type="submit">Criar linha</button>
+       {/* Botão para criar linha */}
+      <button type="submit">
+        {editId ? "Atualizar linha" : "Criar linha"}
+      </button>
       </form>
 
       {loading && <p>Carregando...</p>}
@@ -75,6 +100,18 @@ export default function Dashboard() {
           {linhas.map((linha) => (
             <li key={linha.id}>
               {linha.numero} — {linha.operadora} — {linha.status}
+              <button
+              style={{ marginLeft: 10 }}
+              onClick={() => {
+                setEditId(linha.id);
+                setNumero(linha.numero);
+                setOperadora(linha.operadora);
+                setStatus(linha.status);
+              }}
+            >
+              Editar
+            </button>
+
               <button
                 style={{ marginLeft: 10 }}
                 onClick={() => handleDelete(linha.id)}

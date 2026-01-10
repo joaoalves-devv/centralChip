@@ -13,3 +13,9 @@ export async function createLinha(data) {
   });
   return res.json();
 }
+
+export async function deleteLinha(id) {
+  await fetch(`${API_URL}/linhas/${id}`, {
+    method: "DELETE",
+  });
+}

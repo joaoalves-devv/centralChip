@@ -41,6 +41,21 @@ export default function Dashboard() {
    */
   const [editId, setEditId] = useState(null);
 
+    /**
+   * Filtro de status aplicado à lista
+   * "todos" exibe todas as linhas
+   */
+  const [statusFiltro, setStatusFiltro] = useState("todos");
+
+    /**
+   * Lista de linhas já filtrada por status
+   */
+  const linhasFiltradas =
+    statusFiltro === "todos"
+      ? linhas
+      : linhas.filter((linha) => linha.status === statusFiltro);
+
+
   /**
    * Busca todas as linhas no backend
    * Mantém o estado sempre sincronizado
@@ -166,6 +181,20 @@ export default function Dashboard() {
           </button>
         )}
       </form>
+      {/* FILTRO POR STATUS */}
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ marginRight: 8 }}>Filtrar por status:</label>
+
+        <select
+          value={statusFiltro}
+          onChange={(e) => setStatusFiltro(e.target.value)}
+        >
+          <option value="todos">Todos</option>
+          <option value="ativa">Ativa</option>
+          <option value="suspensa">Suspensa</option>
+          <option value="cancelada">Cancelada</option>
+        </select>
+      </div>
 
       {loading && <p>Carregando...</p>}
 
@@ -189,7 +218,7 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {linhas.map((linha) => (
+            {linhasFiltradas.map((linha) => (
               <tr key={linha.id}>
                 <td>{linha.numero}</td>
                 <td>{linha.operadora}</td>

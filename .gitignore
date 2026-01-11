@@ -30,14 +30,19 @@ out/
 # =========================
 # Docker
 # =========================
-postgres_data/
-docker-data/
+docker/dokcer-compose.yml
+docker/dokcer-compose.override.yml
+docker/*.env
+
 
 # =========================
 # Logs
 # =========================
 logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
 
 # =========================
 # OS / Editor
@@ -57,3 +62,7 @@ coverage/
 # =========================
 *.tmp
 *.temp
+
+# === BUILD ======
+dist/
+build/

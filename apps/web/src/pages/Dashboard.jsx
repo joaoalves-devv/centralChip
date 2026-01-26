@@ -6,60 +6,22 @@ import {
   updateLinha,
 } from "../services/api";
 
-/**
- * Dashboard principal do sistema
- * Responsável por:
- * - Listar linhas
- * - Criar novas linhas
- * - Atualizar linhas existentes
- * - Excluir linhas
- */
 export default function Dashboard() {
-  /**
-   * Lista de linhas retornadas da API
-   */
   const [linhas, setLinhas] = useState([]);
-
-  /**
-   * Controla estado global de loading (requisições)
-   */
   const [loading, setLoading] = useState(false);
-
-  /**
-   * Estado do formulário (usado tanto para criar quanto para editar)
-   */
   const [form, setForm] = useState({
     numero: "",
     operadora: "",
     status: "ativa",
   });
-
-  /**
-   * ID da linha em edição
-   * null → modo criação
-   * id → modo edição
-   */
   const [editId, setEditId] = useState(null);
-
-    /**
-   * Filtro de status aplicado à lista
-   * "todos" exibe todas as linhas
-   */
   const [statusFiltro, setStatusFiltro] = useState("todos");
 
-    /**
-   * Lista de linhas já filtrada por status
-   */
   const linhasFiltradas =
     statusFiltro === "todos"
       ? linhas
       : linhas.filter((linha) => linha.status === statusFiltro);
 
-
-  /**
-   * Busca todas as linhas no backend
-   * Mantém o estado sempre sincronizado
-   */
   async function carregarLinhas() {
     setLoading(true);
     try {
@@ -67,28 +29,20 @@ export default function Dashboard() {
       setLinhas(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Erro ao buscar linhas", err);
+      alert("Erro ao carregar linhas. Verifique se a API está rodando.");
       setLinhas([]);
     } finally {
       setLoading(false);
     }
   }
 
-  /**
-   * Carrega as linhas ao montar o componente
-   */
   useEffect(() => {
     carregarLinhas();
   }, []);
 
-  /**
-   * Submissão do formulário
-   * - Cria nova linha quando editId === null
-   * - Atualiza linha existente quando editId !== null
-   */
   async function handleSubmit(e) {
     e.preventDefault();
 
-    // Validação básica
     if (!form.numero || !form.operadora || !form.status) {
       alert("Preencha todos os campos");
       return;
@@ -98,96 +52,116 @@ export default function Dashboard() {
       setLoading(true);
 
       if (editId) {
-        // Atualização
         await updateLinha(editId, form);
       } else {
-        // Criação
         await createLinha(form);
       }
 
-      // Reset do formulário
       setForm({ numero: "", operadora: "", status: "ativa" });
       setEditId(null);
-
-      // Recarrega lista após alteração
       await carregarLinhas();
     } catch (err) {
-      alert("Erro ao salvar linha");
+      alert(err.message || "Erro ao salvar linha");
     } finally {
       setLoading(false);
     }
   }
 
-  /**
-   * Remove uma linha pelo ID
-   */
   async function handleDelete(id) {
     if (!confirm("Deseja excluir esta linha?")) return;
-    await deleteLinha(id);
-    carregarLinhas();
+    
+    try {
+      await deleteLinha(id);
+      carregarLinhas();
+    } catch (err) {
+      alert(err.message || "Erro ao excluir linha");
+    }
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Dashboard</h2>
+    <div style={{ padding: 20, fontFamily: 'Arial, sans-serif' }}>
+      <h2>CentralChip - Gestor de Linhas Telefônicas</h2>
+      
+      <div style={{ 
+        background: '#f5f5f5', 
+        padding: 20, 
+        borderRadius: 8, 
+        marginBottom: 20 
+      }}>
+        <h3>{editId ? "Editar Linha" : "Cadastrar Nova Linha"}</h3>
+        
+        <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <input
+            placeholder="Número (ex: 11999999999)"
+            value={form.numero}
+            onChange={(e) => setForm({ ...form, numero: e.target.value })}
+            style={{ padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+          />
 
-      {/* FORMULÁRIO DE CRIAÇÃO / EDIÇÃO */}
-      <form onSubmit={handleSubmit} style={{ marginBottom: 20 }}>
-        <input
-          placeholder="Número"
-          value={form.numero}
-          onChange={(e) =>
-            setForm({ ...form, numero: e.target.value })
-          }
-        />
+          <input
+            placeholder="Operadora (ex: Vivo)"
+            value={form.operadora}
+            onChange={(e) => setForm({ ...form, operadora: e.target.value })}
+            style={{ padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+          />
 
-        <input
-          placeholder="Operadora"
-          value={form.operadora}
-          onChange={(e) =>
-            setForm({ ...form, operadora: e.target.value })
-          }
-        />
+          <select
+            value={form.status}
+            onChange={(e) => setForm({ ...form, status: e.target.value })}
+            style={{ padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+          >
+            <option value="ativa">Ativa</option>
+            <option value="suspensa">Suspensa</option>
+            <option value="cancelada">Cancelada</option>
+          </select>
 
-        <select
-          value={form.status}
-          onChange={(e) =>
-            setForm({ ...form, status: e.target.value })
-          }
-        >
-          <option value="ativa">Ativa</option>
-          <option value="suspensa">Suspensa</option>
-          <option value="cancelada">Cancelada</option>
-        </select>
-
-        <button type="submit" disabled={loading}>
-          {editId ? "Atualizar" : "Criar"}
-        </button>
-
-        {/* Botão de cancelamento visível apenas em modo edição */}
-        {editId && (
-          <button
-            type="button"
-            onClick={() => {
-              setEditId(null);
-              setForm({
-                numero: "",
-                operadora: "",
-                status: "ativa",
-              });
+          <button 
+            type="submit" 
+            disabled={loading}
+            style={{
+              padding: '8px 16px',
+              background: editId ? '#4CAF50' : '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer'
             }}
           >
-            Cancelar
+            {editId ? "Atualizar" : "Criar"}
           </button>
-        )}
-      </form>
-      {/* FILTRO POR STATUS */}
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ marginRight: 8 }}>Filtrar por status:</label>
 
+          {editId && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditId(null);
+                setForm({
+                  numero: "",
+                  operadora: "",
+                  status: "ativa",
+                });
+              }}
+              style={{
+                padding: '8px 16px',
+                background: '#f44336',
+                color: 'white',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer'
+              }}
+            >
+              Cancelar
+            </button>
+          )}
+        </form>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ marginRight: 8, fontWeight: 'bold' }}>Filtrar por status:</label>
         <select
           value={statusFiltro}
           onChange={(e) => setStatusFiltro(e.target.value)}
+          style={{ padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
         >
           <option value="todos">Todos</option>
           <option value="ativa">Ativa</option>
@@ -199,18 +173,22 @@ export default function Dashboard() {
       {loading && <p>Carregando...</p>}
 
       {!loading && linhas.length === 0 && (
-        <p>Nenhuma linha cadastrada</p>
+        <p>Nenhuma linha cadastrada. Cadastre a primeira linha acima.</p>
       )}
 
-      {/* TABELA DE LINHAS */}
       {!loading && linhas.length > 0 && (
         <table
           border="1"
           cellPadding="8"
-          style={{ borderCollapse: "collapse", width: "100%" }}
+          style={{ 
+            borderCollapse: "collapse", 
+            width: "100%",
+            background: 'white'
+          }}
         >
           <thead>
-            <tr>
+            <tr style={{ background: '#f2f2f2' }}>
+              <th>ID</th>
               <th>Número</th>
               <th>Operadora</th>
               <th>Status</th>
@@ -220,9 +198,25 @@ export default function Dashboard() {
           <tbody>
             {linhasFiltradas.map((linha) => (
               <tr key={linha.id}>
+                <td style={{ textAlign: 'center' }}>{linha.id}</td>
                 <td>{linha.numero}</td>
                 <td>{linha.operadora}</td>
-                <td>{linha.status}</td>
+                <td>
+                  <span style={{
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    background: 
+                      linha.status === 'ativa' ? '#d4edda' :
+                      linha.status === 'suspensa' ? '#fff3cd' :
+                      '#f8d7da',
+                    color: 
+                      linha.status === 'ativa' ? '#155724' :
+                      linha.status === 'suspensa' ? '#856404' :
+                      '#721c24'
+                  }}>
+                    {linha.status}
+                  </span>
+                </td>
                 <td>
                   <button
                     onClick={() => {
@@ -233,13 +227,29 @@ export default function Dashboard() {
                         status: linha.status,
                       });
                     }}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#2196F3',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      marginRight: 8
+                    }}
                   >
                     Editar
                   </button>
 
                   <button
-                    style={{ marginLeft: 8 }}
                     onClick={() => handleDelete(linha.id)}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#f44336',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: 'pointer'
+                    }}
                   >
                     Excluir
                   </button>

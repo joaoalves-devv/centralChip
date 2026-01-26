@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: gestor-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    networks:
+      - gestor-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s      # Verifica a cada 10 segundos
+      timeout: 5s        # Espera 5 segundos pela resposta
+      retries: 5         # Tenta 5 vezes antes de considerar falha
+      start_period: 30s  # Espera 30 segundos antes de começar a verificar
+
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: ../../docker/api.Dockerfile
+    container_name: gestor-api
+    env_file:
+      - ../.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy 
+    restart: unless-stopped
+    networks:
+      - gestor-network
+    volumes:
+      - ../apps/api:/app
+      - /app/node_modules
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: ../../docker/web.Dockerfile
+    container_name: gestor-web
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - gestor-network
+    volumes:
+      - ../apps/web:/app
+      - /app/node_modules
+      - /app/dist
+
+volumes:
+  postgres_data:
+
+networks:
+  gestor-network:
+    driver: bridge

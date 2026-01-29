@@ -22,8 +22,14 @@ export default function Dashboard() {
   const [editId, setEditId] = useState(null);
   const [statusFiltro, setStatusFiltro] = useState("todos");
   const [searchTerm, setSearchTerm] = useState("");
+  const [filtroDDI, setFiltroDDI] = useState("todos");
   const [filtroCodigoPais, setFiltroCodigoPais] = useState("");
   const [showDropdownPais, setShowDropdownPais] = useState(false);
+  const [showFiltrosModal, setShowFiltrosModal] = useState(false);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(10);
+  const [formOriginal, setFormOriginal] = useState(null);
+  const [filtrosOriginais, setFiltrosOriginais] = useState(null);
 
   // Lista de países com códigos
   const paisesDisponiveis = [
@@ -122,31 +128,77 @@ export default function Dashboard() {
     });
   };
 
-  // Função para calcular data de vencimento (90 dias após a criação)
+  // Função para calcular data de vencimento (90 dias após a criação) com ajuste de timezone
   const calcularDataVencimento = (dataUltimaRecarga) => {
     if (!dataUltimaRecarga) return '';
     
+    // Cria data em UTC para evitar problemas de timezone
     const data = new Date(dataUltimaRecarga);
-    data.setDate(data.getDate() + 90);
+    data.setUTCDate(data.getUTCDate() + 90);
     
     // Formata para o formato datetime-local
     return data.toISOString().slice(0, 16);
   };
 
+  // Função para calcular dias sem recarga
+  const calcularDiasSemRecarga = (dataUltimaRecarga) => {
+    if (!dataUltimaRecarga) return 0;
+    
+    const data = new Date(dataUltimaRecarga);
+    const hoje = new Date();
+    const diferenca = hoje - data;
+    return Math.floor(diferenca / (1000 * 60 * 60 * 24));
+  };
+
+  // Função para determinar status automático baseado em dias sem recarga
+  const calcularStatusAutomatico = (dataUltimaRecarga, statusAtual) => {
+    const diasSemRecarga = calcularDiasSemRecarga(dataUltimaRecarga);
+    
+    if (diasSemRecarga > 150) {
+      return 'cancelado';
+    } else if (diasSemRecarga > 90) {
+      return 'bloqueado';
+    }
+    
+    // Se os dias estão dentro do limite, é ativa
+    return 'ativa';
+  };
+
   const linhasFiltradas =
     linhas.filter((linha) => {
       const matchesStatus = statusFiltro === "todos" || linha.status === statusFiltro;
+      const matchesDDI = filtroDDI === "todos" || (linha.codigoTelefone || "+55") === filtroDDI;
       const matchesSearch = searchTerm === "" ||
         linha.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
         linha.operadora.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesDDI && matchesSearch;
     });
+
+  // Paginação
+  const totalPaginas = Math.ceil(linhasFiltradas.length / itensPorPagina);
+  const indiceInicial = (paginaAtual - 1) * itensPorPagina;
+  const indiceFinal = indiceInicial + itensPorPagina;
+  const linhasPaginadas = linhasFiltradas.slice(indiceInicial, indiceFinal);
 
   async function carregarLinhas() {
     setLoading(true);
     try {
       const data = await getLinhas();
-      setLinhas(Array.isArray(data) ? data : []);
+      if (Array.isArray(data)) {
+        // Aplica status automático apenas para bloqueado e cancelado
+        const linhasComStatusAtualizado = data.map(linha => {
+          const statusAutomatico = calcularStatusAutomatico(linha.data_ultima_recarga, linha.status);
+          // Permite que status bloqueado/cancelado sejam ativados automaticamente
+          // mas respeita o status atual se for diferente
+          return {
+            ...linha,
+            status: statusAutomatico
+          };
+        });
+        setLinhas(linhasComStatusAtualizado);
+      } else {
+        setLinhas([]);
+      }
     } catch (err) {
       console.error("Erro ao buscar linhas", err);
       alert("Erro ao carregar linhas. Verifique se a API está rodando.");
@@ -160,6 +212,88 @@ export default function Dashboard() {
     carregarLinhas();
   }, []);
 
+  // DDDs válidos brasileiros
+  const dddsValidos = [
+    11, 12, 13, 14, 15, 16, 17, 18, 19, // São Paulo
+    21, 22, 24, // Rio de Janeiro
+    27, 28, // Espírito Santo
+    31, 32, 33, 34, 35, 37, 38, // Minas Gerais
+    41, 42, 43, 44, 45, 46, // Paraná
+    47, 48, 49, // Santa Catarina
+    51, 53, 54, 55, // Rio Grande do Sul
+    61, 62, 64, // Distrito Federal e Goiás
+    63, 64, 65, 66, 67, 68, 69, // Mato Grosso, Mato Grosso do Sul, Rondônia, Roraima, Amazonas, Amapá, Tocantins
+    71, 73, 74, 75, 77, // Bahia
+    79, // Sergipe
+    81, 82, 83, 84, 85, 86, 87, 88, 89, // Ceará, Pernambuco, Alagoas, Paraíba, Rio Grande do Norte
+    91, 92, 93, 94, 95, 97, 98, 99, // Pará, Amazonas, Amapá
+  ];
+
+  // Função para validar se é um padrão óbvio (sequência ou repetição)
+  const ehPadraoObvio = (numero) => {
+    const digitos = numero.replace(/\D/g, '');
+    
+    // Números com muitas repetições (tipo 11111111 ou 22222222)
+    if (/^(\d)\1{6,}$/.test(digitos)) return true;
+    
+    // Sequências óbvias (tipo 12345678 ou 87654321)
+    if (/^(0123456789|1234567890|123456789|987654321|12345678|23456789|34567890|45678901|56789012|67890123|78901234|89012345|90123456)/.test(digitos)) return true;
+    
+    // Padrões alternados óbvios (tipo 12121212, 01010101)
+    if (/^([0-9])\d?(?:\1\d?)+$/.test(digitos) && /^(.{2})\1+$/.test(digitos)) return true;
+    
+    return false;
+  };
+
+  // Função para validar número brasileiro com regras mais rigorosas
+  const validarNumeroCompleto = (numero) => {
+    const apenasDigitos = numero.replace(/\D/g, '');
+    
+    // Para Brasil (+55), aceita 10 ou 11 dígitos
+    if (form.codigoTelefone === "+55") {
+      // Verifica tamanho
+      if (apenasDigitos.length !== 10 && apenasDigitos.length !== 11) {
+        return false;
+      }
+
+      // Verifica se é um padrão óbvio
+      if (ehPadraoObvio(apenasDigitos)) {
+        return false;
+      }
+
+      // Extrai DDD (primeiros 2 dígitos)
+      const ddd = parseInt(apenasDigitos.substring(0, 2));
+      
+      // Valida se DDD existe
+      if (!dddsValidos.includes(ddd)) {
+        return false;
+      }
+
+      // Extrai o primeiro dígito do número (após DDD)
+      const primeiroDigitoNumero = parseInt(apenasDigitos[2]);
+
+      // Validações específicas para Brasil
+      if (apenasDigitos.length === 10) {
+        // Número com 8 dígitos (fixo)
+        // Deve começar com 2-5 (fixo) ou 6-9 (celular antigo) - mas 6-8 são raros
+        if (primeiroDigitoNumero === 0 || primeiroDigitoNumero === 1) {
+          return false; // 0 e 1 são inválidos para fixos
+        }
+      } else if (apenasDigitos.length === 11) {
+        // Número com 9 dígitos (celular)
+        // Deve começar com 9
+        if (primeiroDigitoNumero !== 9) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+    
+    // Para outros países, valida mínimo de 7 dígitos
+    return apenasDigitos.length >= 7;
+  };
+
   async function handleSubmit(e) {
     e.preventDefault();
 
@@ -168,7 +302,50 @@ export default function Dashboard() {
       return;
     }
 
+    // Validar se o número é completo e tem tamanho adequado
+    if (!validarNumeroCompleto(form.numero)) {
+      const codigoAtual = form.codigoTelefone || "+55";
+      const apenasDigitos = form.numero.replace(/\D/g, '');
+      const ddd = parseInt(apenasDigitos.substring(0, 2));
+      
+      if (codigoAtual === "+55") {
+        let mensagemErro = "❌ Número inválido!\n\n";
+
+        // Verifica qual foi o erro
+        if (apenasDigitos.length !== 10 && apenasDigitos.length !== 11) {
+          mensagemErro += "Formato incorreto. Para números brasileiros (+55):\n" +
+            "• (XX) XXXX-XXXX (10 dígitos - Fixo/Celular antigo)\n" +
+            "• (XX) NNNNN-XXXX (11 dígitos - Celular moderno)\n\n";
+        } else if (!dddsValidos.includes(ddd)) {
+          mensagemErro += `O DDD (${ddd}) não é válido!\n\n` +
+            "Verifique se digitou corretamente o código de área.\n\n";
+        } else if (ehPadraoObvio(apenasDigitos)) {
+          mensagemErro += "O número parece ser um padrão óbvio ou sequência.\n" +
+            "Por favor, insira um número real e válido.\n\n";
+        } else {
+          const primeiroDigito = apenasDigitos[2];
+          if (apenasDigitos.length === 11 && primeiroDigito !== '9') {
+            mensagemErro += "Celular deve começar com 9!\n" +
+              `Você digitou: (${apenasDigitos.substring(0, 2)}) ${primeiroDigito}...\n\n`;
+          } else if (apenasDigitos.length === 10 && (primeiroDigito === '0' || primeiroDigito === '1')) {
+            mensagemErro += "Número de fixo inválido!\n" +
+              "Fixos devem começar com 2-5 ou raramente 6-8.\n\n";
+          }
+        }
+
+        mensagemErro += "Exemplos válidos:\n" +
+          "• (85) 3333-4444 (Fixo em Fortaleza)\n" +
+          "• (85) 98500-3930 (Celular em Fortaleza)";
+
+        alert(mensagemErro);
+      } else {
+        alert(`❌ Número inválido!\n\nO número deve ter pelo menos 7 dígitos.`);
+      }
+      return;
+    }
+
     // Validar duplicata de número (apenas ao criar novo registro)
+
     if (!editId) {
       if (verificarNumeroDuplicado(form.numero)) {
         alert(
@@ -193,10 +370,20 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
+      // Sempre recalcula o status baseado na data de recarga
+      const statusFinal = form.data_ultima_recarga 
+        ? calcularStatusAutomatico(form.data_ultima_recarga, form.status)
+        : form.status;
+
+      const formComStatusAtualizado = {
+        ...form,
+        status: statusFinal
+      };
+
       if (editId) {
-        await updateLinha(editId, form);
+        await updateLinha(editId, formComStatusAtualizado);
       } else {
-        await createLinha(form);
+        await createLinha(formComStatusAtualizado);
       }
 
       setForm({ numero: "", operadora: "", status: "ativa", data_ultima_recarga: "", data_vencimento_aproximada: "", fonte_status: "Manual", codigoTelefone: "+55" });
@@ -225,20 +412,61 @@ export default function Dashboard() {
     if (linha) {
       setEditId(linha.id);
       const dataRecarga = linha.data_ultima_recarga ? new Date(linha.data_ultima_recarga).toISOString().slice(0, 16) : "";
-      setForm({
+      const novoForm = {
         numero: linha.numero,
         operadora: linha.operadora,
         status: linha.status,
         data_ultima_recarga: dataRecarga,
         data_vencimento_aproximada: dataRecarga ? calcularDataVencimento(dataRecarga) : "",
         fonte_status: linha.fonte_status || "Manual",
-      });
+        codigoTelefone: linha.codigoTelefone || "+55",
+      };
+      setForm(novoForm);
+      setFormOriginal(novoForm);
     } else {
       setEditId(null);
-      setForm({ numero: "", operadora: "", status: "ativa", data_ultima_recarga: "", data_vencimento_aproximada: "", fonte_status: "Manual", codigoTelefone: "+55" });
+      const formVazio = { numero: "", operadora: "", status: "ativa", data_ultima_recarga: "", data_vencimento_aproximada: "", fonte_status: "Manual", codigoTelefone: "+55" };
+      setForm(formVazio);
+      setFormOriginal(formVazio);
     }
     setShowModal(true);
   }
+
+  const handleCloseModalCadastro = () => {
+    // Verifica se houve alterações
+    if (form !== formOriginal && (
+      form.numero !== formOriginal.numero ||
+      form.operadora !== formOriginal.operadora ||
+      form.status !== formOriginal.status ||
+      form.data_ultima_recarga !== formOriginal.data_ultima_recarga ||
+      form.fonte_status !== formOriginal.fonte_status ||
+      form.codigoTelefone !== formOriginal.codigoTelefone
+    )) {
+      if (window.confirm("Você tem alterações não salvas. Deseja sair sem salvar?")) {
+        setShowModal(false);
+      }
+    } else {
+      setShowModal(false);
+    }
+  };
+
+  const handleCloseFiltrosModal = () => {
+    // Verifica se houve alterações nos filtros
+    if (filtrosOriginais && (
+      statusFiltro !== filtrosOriginais.statusFiltro ||
+      filtroDDI !== filtrosOriginais.filtroDDI ||
+      searchTerm !== filtrosOriginais.searchTerm
+    )) {
+      if (window.confirm("Você alterou os filtros. Deseja descartar as alterações?")) {
+        setStatusFiltro(filtrosOriginais.statusFiltro);
+        setFiltroDDI(filtrosOriginais.filtroDDI);
+        setSearchTerm(filtrosOriginais.searchTerm);
+        setShowFiltrosModal(false);
+      }
+    } else {
+      setShowFiltrosModal(false);
+    }
+  };
 
   return (
     <div style={{
@@ -364,68 +592,84 @@ export default function Dashboard() {
             justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: 20,
-            gap: 16,
-            flexWrap: 'wrap'
+            gap: 12
           }} className="filter-section">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
-              <div className="filter-item">
-                <label style={{ marginRight: 8, fontWeight: 'bold', color: '#333' }}>Filtrar por status:</label>
-                <select
-                  value={statusFiltro}
-                  onChange={(e) => setStatusFiltro(e.target.value)}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: 4,
-                    border: '1px solid #ddd',
-                    backgroundColor: 'white',
-                    fontSize: '14px'
-                  }}
-                >
-                  <option value="todos">Todos</option>
-                  <option value="ativa">Ativa</option>
-                  <option value="suspensa">Suspensa</option>
-                  <option value="cancelada">Cancelada</option>
-                </select>
-              </div>
+            <button
+              onClick={() => {
+                setFiltrosOriginais({ statusFiltro, filtroDDI, searchTerm });
+                setShowFiltrosModal(true);
+              }}
+              title="Abrir filtros"
+              style={{
+                padding: '11px 14px',
+                background: '#f5f5f5',
+                color: '#666',
+                border: '1px solid #ddd',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: '18px',
+                fontWeight: 'bold',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                transition: 'all 0.3s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: '44px',
+                height: '44px',
+                flexShrink: 0
+              }}
+              onMouseOver={(e) => {
+                e.target.style.backgroundColor = '#e0e0e0';
+                e.target.style.borderColor = '#999';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.backgroundColor = '#f5f5f5';
+                e.target.style.borderColor = '#ddd';
+              }}
+            >
+              🔎
+            </button>
 
-              <div className="filter-item" style={{ flex: '1', minWidth: '200px' }}>
-                <input
-                  type="text"
-                  placeholder="Buscar por número ou operadora..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: 4,
-                    border: '1px solid #ddd',
-                    width: '100%',
-                    fontSize: '14px',
-                    backgroundColor: 'white'
-                  }}
-                />
-              </div>
-            </div>
+            <input
+              type="text"
+              placeholder="Buscar por número ou operadora..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                padding: '12px 16px',
+                borderRadius: 6,
+                border: '1px solid #ddd',
+                flex: 1,
+                fontSize: '14px',
+                backgroundColor: 'white',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                transition: 'border-color 0.3s'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#2196F3'}
+              onBlur={(e) => e.target.style.borderColor = '#ddd'}
+            />
 
             <button
               onClick={() => openModal()}
               className="btn-cadastrar"
               style={{
-                padding: '10px 20px',
+                padding: '12px 20px',
                 background: '#4CAF50',
                 color: 'white',
                 border: 'none',
-                borderRadius: 4,
+                borderRadius: 6,
                 cursor: 'pointer',
-                fontSize: '16px',
+                fontSize: '14px',
                 fontWeight: 'bold',
                 whiteSpace: 'nowrap',
                 boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                transition: 'background-color 0.3s'
+                transition: 'background-color 0.3s',
+                flexShrink: 0
               }}
               onMouseOver={(e) => e.target.style.backgroundColor = '#45a049'}
               onMouseOut={(e) => e.target.style.backgroundColor = '#4CAF50'}
             >
-              + Cadastrar Nova Linha
+              + Cadastrar
             </button>
           </div>
 
@@ -465,6 +709,118 @@ export default function Dashboard() {
           )}
 
           {!loading && linhas.length > 0 && (
+            <>
+              {/* Paginação no topo */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'flex-start',
+                alignItems: 'center',
+                marginBottom: '20px',
+                gap: '8px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ fontSize: '12px', color: '#666', fontWeight: 'bold', minWidth: 'fit-content' }}>
+                  Exibindo {indiceInicial + 1}-{Math.min(indiceFinal, linhasFiltradas.length)} de {linhasFiltradas.length}
+                </div>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button
+                    onClick={() => setPaginaAtual(Math.max(1, paginaAtual - 1))}
+                    disabled={paginaAtual === 1}
+                    style={{
+                      padding: '4px 8px',
+                      border: '1px solid #ddd',
+                      borderRadius: 3,
+                      cursor: paginaAtual === 1 ? 'not-allowed' : 'pointer',
+                      fontSize: '11px',
+                      backgroundColor: paginaAtual === 1 ? '#f0f0f0' : 'white',
+                      color: paginaAtual === 1 ? '#999' : '#333',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    ‹
+                  </button>
+
+                  {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
+                    let numeroPagina;
+                    if (totalPaginas <= 5) {
+                      numeroPagina = i + 1;
+                    } else if (paginaAtual <= 3) {
+                      numeroPagina = i + 1;
+                    } else if (paginaAtual >= totalPaginas - 2) {
+                      numeroPagina = totalPaginas - 4 + i;
+                    } else {
+                      numeroPagina = paginaAtual - 2 + i;
+                    }
+
+                    return (
+                      <button
+                        key={numeroPagina}
+                        onClick={() => setPaginaAtual(numeroPagina)}
+                        style={{
+                          padding: '4px 8px',
+                          border: paginaAtual === numeroPagina ? 'none' : '1px solid #ddd',
+                          borderRadius: 3,
+                          cursor: 'pointer',
+                          fontSize: '11px',
+                          backgroundColor: paginaAtual === numeroPagina ? '#2196F3' : 'white',
+                          color: paginaAtual === numeroPagina ? 'white' : '#333',
+                          fontWeight: paginaAtual === numeroPagina ? 'bold' : 'normal',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {numeroPagina}
+                      </button>
+                    );
+                  })}
+
+                  {totalPaginas > 5 && paginaAtual < totalPaginas - 2 && (
+                    <span style={{ padding: '0 2px', color: '#666', fontSize: '11px' }}>...</span>
+                  )}
+
+                  <button
+                    onClick={() => setPaginaAtual(Math.min(totalPaginas, paginaAtual + 1))}
+                    disabled={paginaAtual === totalPaginas}
+                    style={{
+                      padding: '4px 8px',
+                      border: '1px solid #ddd',
+                      borderRadius: 3,
+                      cursor: paginaAtual === totalPaginas ? 'not-allowed' : 'pointer',
+                      fontSize: '11px',
+                      backgroundColor: paginaAtual === totalPaginas ? '#f0f0f0' : 'white',
+                      color: paginaAtual === totalPaginas ? '#999' : '#333',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    ›
+                  </button>
+                </div>
+
+                <select
+                  value={itensPorPagina}
+                  onChange={(e) => {
+                    setItensPorPagina(parseInt(e.target.value));
+                    setPaginaAtual(1);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    border: '1px solid #ddd',
+                    borderRadius: 3,
+                    fontSize: '11px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+
+              {/* Tabela */}
+            </>
+          )}
+
+          {!loading && linhas.length > 0 && (
             <div style={{ overflowX: 'auto' }} className="table-container">
               <table
                 style={{
@@ -492,13 +848,17 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {linhasFiltradas.map((linha, index) => (
+                  {linhasPaginadas.map((linha, index) => (
                     <tr key={linha.id} style={{
                       backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white',
                       transition: 'background-color 0.2s'
                     }}>
                       <td className="table-cell" style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid #eee' }}>{linha.id}</td>
-                      <td className="table-cell" style={{ padding: '12px', borderBottom: '1px solid #eee', fontFamily: 'monospace', fontSize: '14px' }}>{linha.numero}</td>
+                      <td className="table-cell" style={{ padding: '12px', borderBottom: '1px solid #eee', fontFamily: 'monospace', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ whiteSpace: 'nowrap', minWidth: 'fit-content' }}>
+                          {linha.codigoTelefone || "+55"} {linha.numero}
+                        </span>
+                      </td>
                       <td className="table-cell" style={{ padding: '12px', borderBottom: '1px solid #eee' }}>{linha.operadora}</td>
                       <td className="table-cell" style={{ padding: '12px', borderBottom: '1px solid #eee' }}>
                         <span className="status-badge" style={{
@@ -638,7 +998,7 @@ export default function Dashboard() {
                     {editId ? '✏️ Editar Linha' : '➕ Cadastrar Nova Linha'}
                   </h3>
                   <button
-                    onClick={() => setShowModal(false)}
+                    onClick={handleCloseModalCadastro}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -699,17 +1059,13 @@ export default function Dashboard() {
                           ℹ
                         </span>
                       </label>
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0' }}>
                         <button
                           type="button"
                           onClick={() => setShowDropdownPais(!showDropdownPais)}
                           style={{
-                            position: 'absolute',
-                            left: '0',
-                            top: '0',
-                            height: '46px',
-                            minWidth: '60px',
-                            padding: '0 12px',
+                            position: 'relative',
+                            minWidth: '80px',
                             backgroundColor: 'white',
                             border: '2px solid #ddd',
                             borderRadius: '6px 0 0 6px',
@@ -732,70 +1088,71 @@ export default function Dashboard() {
                           <span style={{ fontSize: '12px', fontWeight: 'bold' }}>
                             {form.codigoTelefone}
                           </span>
-                        </button>
 
-                        {showDropdownPais && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: '0',
-                            backgroundColor: 'white',
-                            border: '1px solid #ddd',
-                            borderRadius: '0 0 6px 0',
-                            maxHeight: '200px',
-                            overflowY: 'auto',
-                            zIndex: 10,
-                            boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-                            minWidth: '60px',
-                            marginTop: '-1px'
-                          }}>
+                          {showDropdownPais && (
                             <div style={{
-                              padding: '8px',
-                              borderBottom: '1px solid #eee'
+                              position: 'absolute',
+                              top: '100%',
+                              left: '0',
+                              right: '0',
+                              backgroundColor: 'white',
+                              border: '1px solid #ddd',
+                              borderTop: 'none',
+                              borderRadius: '0 0 6px 6px',
+                              maxHeight: '200px',
+                              overflowY: 'auto',
+                              zIndex: 10,
+                              boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                              marginTop: '2px'
                             }}>
-                              <input
-                                type="text"
-                                placeholder="Buscar..."
-                                value={filtroCodigoPais}
-                                onChange={(e) => setFiltroCodigoPais(e.target.value)}
-                                autoFocus
-                                style={{
-                                  width: '100%',
-                                  padding: '6px 8px',
-                                  border: '1px solid #ddd',
-                                  borderRadius: '4px',
-                                  fontSize: '12px'
-                                }}
-                              />
-                            </div>
-                            {paisesFiltrados.map((pais) => (
-                              <div
-                                key={pais.codigo}
-                                onClick={() => {
-                                  setForm({ ...form, codigoTelefone: pais.codigo });
-                                  setFiltroCodigoPais("");
-                                  setShowDropdownPais(false);
-                                }}
-                                style={{
-                                  padding: '10px 8px',
-                                  cursor: 'pointer',
-                                  backgroundColor: form.codigoTelefone === pais.codigo ? '#e3f2fd' : 'white',
-                                  borderBottom: '1px solid #eee',
-                                  fontSize: '13px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  transition: 'background-color 0.2s'
-                                }}
-                                onMouseOver={(e) => e.target.style.backgroundColor = '#f0f0f0'}
-                                onMouseOut={(e) => e.target.style.backgroundColor = form.codigoTelefone === pais.codigo ? '#e3f2fd' : 'white'}
-                              >
-                                <span style={{ fontSize: '16px' }}>{pais.bandeira}</span>
-                                <span>{pais.codigo}</span>
+                              <div style={{
+                                padding: '8px',
+                                borderBottom: '1px solid #eee'
+                              }}>
+                                <input
+                                  type="text"
+                                  placeholder="Buscar..."
+                                  value={filtroCodigoPais}
+                                  onChange={(e) => setFiltroCodigoPais(e.target.value)}
+                                  autoFocus
+                                  style={{
+                                    width: '100%',
+                                    padding: '6px 8px',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '4px',
+                                    fontSize: '12px'
+                                  }}
+                                />
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              {paisesFiltrados.map((pais) => (
+                                <div
+                                  key={pais.codigo}
+                                  onClick={() => {
+                                    setForm({ ...form, codigoTelefone: pais.codigo });
+                                    setFiltroCodigoPais("");
+                                    setShowDropdownPais(false);
+                                  }}
+                                  style={{
+                                    padding: '10px 8px',
+                                    cursor: 'pointer',
+                                    backgroundColor: form.codigoTelefone === pais.codigo ? '#e3f2fd' : 'white',
+                                    borderBottom: '1px solid #eee',
+                                    fontSize: '13px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    transition: 'background-color 0.2s'
+                                  }}
+                                  onMouseOver={(e) => e.target.style.backgroundColor = '#f0f0f0'}
+                                  onMouseOut={(e) => e.target.style.backgroundColor = form.codigoTelefone === pais.codigo ? '#e3f2fd' : 'white'}
+                                >
+                                  <span style={{ fontSize: '16px' }}>{pais.bandeira}</span>
+                                  <span>{pais.codigo}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </button>
 
                         <input
                           type="text"
@@ -804,9 +1161,10 @@ export default function Dashboard() {
                           onChange={(e) => setForm({ ...form, numero: formatarNumeroTelefone(e.target.value) })}
                           style={{
                             width: '100%',
-                            padding: '12px 12px 12px 75px',
-                            borderRadius: '6px',
+                            padding: '12px',
+                            borderRadius: '0 6px 6px 0',
                             border: '2px solid #ddd',
+                            borderLeft: 'none',
                             fontSize: '14px',
                             transition: 'border-color 0.3s',
                             backgroundColor: '#fafafa'
@@ -851,24 +1209,49 @@ export default function Dashboard() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }} className="form-grid">
                     <div>
                       <label style={{
-                        display: 'block',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
                         marginBottom: '8px',
                         fontWeight: 'bold',
                         color: '#333',
                         fontSize: '14px'
                       }}>
                         Status *
+                        <span
+                          title="Regras de negócio:\n• ATIVA: até 90 dias sem recarga\n• BLOQUEADO: entre 91 e 150 dias\n• CANCELADO: mais de 150 dias"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            backgroundColor: '#2196F3',
+                            color: 'white',
+                            fontSize: '12px',
+                            fontWeight: 'bold',
+                            cursor: 'help',
+                            marginLeft: '4px'
+                          }}
+                        >
+                          ℹ
+                        </span>
+                        <span style={{ fontSize: '12px', color: '#999', marginLeft: 'auto' }}>(Automático)</span>
                       </label>
                       <select
                         value={form.status}
                         onChange={(e) => setForm({ ...form, status: e.target.value })}
+                        disabled
                         style={{
                           width: '100%',
                           padding: '12px',
                           borderRadius: '6px',
                           border: '2px solid #ddd',
                           fontSize: '14px',
-                          backgroundColor: '#fafafa',
+                          backgroundColor: '#e8f5e9',
+                          cursor: 'not-allowed',
+                          opacity: 0.8,
                           transition: 'border-color 0.3s'
                         }}
                         onFocus={(e) => e.target.style.borderColor = '#2196F3'}
@@ -876,8 +1259,8 @@ export default function Dashboard() {
                         required
                       >
                         <option value="ativa">✅ Ativa</option>
-                        <option value="suspensa">⚠️ Suspensa</option>
-                        <option value="cancelada">❌ Cancelada</option>
+                        <option value="bloqueado">🚫 Bloqueado</option>
+                        <option value="cancelado">❌ Cancelado</option>
                       </select>
                     </div>
 
@@ -916,23 +1299,39 @@ export default function Dashboard() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '30px' }} className="form-grid">
                     <div>
                       <label style={{
-                        display: 'block',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
                         marginBottom: '8px',
                         fontWeight: 'bold',
                         color: '#333',
                         fontSize: '14px'
                       }}>
-                        📅 Última Recarga
+                        <span>📅 Última Recarga</span>
+                        <span style={{
+                          fontSize: '12px',
+                          fontWeight: 'normal',
+                          color: form.data_ultima_recarga ? '#666' : '#ccc',
+                          backgroundColor: form.data_ultima_recarga ? '#f0f0f0' : '#f9f9f9',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid #ddd'
+                        }}>
+                          {form.data_ultima_recarga ? `${calcularDiasSemRecarga(form.data_ultima_recarga)} dias` : '-'}
+                        </span>
                       </label>
                       <input
                         type="datetime-local"
                         value={form.data_ultima_recarga}
                         onChange={(e) => {
                           const newDate = e.target.value;
+                          // Recalcula automaticamente o status baseado na nova data
+                          const novoStatus = calcularStatusAutomatico(newDate, form.status);
                           setForm({ 
                             ...form, 
                             data_ultima_recarga: newDate,
-                            data_vencimento_aproximada: calcularDataVencimento(newDate)
+                            data_vencimento_aproximada: calcularDataVencimento(newDate),
+                            status: novoStatus
                           });
                         }}
                         style={{
@@ -1005,7 +1404,7 @@ export default function Dashboard() {
                   <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end', paddingTop: '20px', borderTop: '1px solid #eee' }} className="action-buttons">
                     <button
                       type="button"
-                      onClick={() => setShowModal(false)}
+                      onClick={handleCloseModalCadastro}
                       style={{
                         padding: '12px 24px',
                         background: '#6c757d',
@@ -1063,6 +1462,210 @@ export default function Dashboard() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Filtros */}
+          {showFiltrosModal && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              animation: 'fadeIn 0.3s ease-out'
+            }}>
+              <div style={{
+                background: 'white',
+                padding: '30px',
+                borderRadius: '12px',
+                width: '90%',
+                maxWidth: '500px',
+                maxHeight: '90vh',
+                overflow: 'auto',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                animation: 'slideIn 0.3s ease-out'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '20px',
+                  borderBottom: '2px solid #2196F3',
+                  paddingBottom: '10px'
+                }}>
+                  <h3 style={{
+                    margin: 0,
+                    color: '#2196F3',
+                    fontSize: '24px',
+                    fontWeight: 'bold'
+                  }}>
+                    🔎 Filtros
+                  </h3>
+                  <button
+                    onClick={handleCloseFiltrosModal}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontSize: '24px',
+                      cursor: 'pointer',
+                      color: '#666',
+                      padding: '0',
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => {
+                      e.target.style.backgroundColor = '#f0f0f0';
+                      e.target.style.color = '#333';
+                    }}
+                    onMouseOut={(e) => {
+                      e.target.style.backgroundColor = 'transparent';
+                      e.target.style.color = '#666';
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      fontWeight: 'bold',
+                      color: '#333',
+                      fontSize: '14px'
+                    }}>
+                      Filtrar por status:
+                    </label>
+                    <select
+                      value={statusFiltro}
+                      onChange={(e) => setStatusFiltro(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        borderRadius: '6px',
+                        border: '2px solid #ddd',
+                        fontSize: '14px',
+                        backgroundColor: '#fafafa',
+                        transition: 'border-color 0.3s'
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = '#2196F3'}
+                      onBlur={(e) => e.target.style.borderColor = '#ddd'}
+                    >
+                      <option value="todos">Todos</option>
+                      <option value="ativa">✅ Ativa</option>
+                      <option value="suspensa">⚠️ Suspensa</option>
+                      <option value="cancelada">❌ Cancelada</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      fontWeight: 'bold',
+                      color: '#333',
+                      fontSize: '14px'
+                    }}>
+                      Filtrar por DDI:
+                    </label>
+                    <select
+                      value={filtroDDI}
+                      onChange={(e) => setFiltroDDI(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        borderRadius: '6px',
+                        border: '2px solid #ddd',
+                        fontSize: '14px',
+                        backgroundColor: '#fafafa',
+                        transition: 'border-color 0.3s'
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = '#2196F3'}
+                      onBlur={(e) => e.target.style.borderColor = '#ddd'}
+                    >
+                      <option value="todos">Todos</option>
+                      {paisesDisponiveis.map((pais) => (
+                        <option key={pais.codigo} value={pais.codigo}>
+                          {pais.bandeira} {pais.codigo} - {pais.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    gap: '12px',
+                    justifyContent: 'flex-end',
+                    paddingTop: '20px',
+                    borderTop: '1px solid #eee'
+                  }}>
+                    <button
+                      onClick={() => {
+                        setStatusFiltro('todos');
+                        setFiltroDDI('todos');
+                        setSearchTerm('');
+                      }}
+                      style={{
+                        padding: '12px 20px',
+                        background: '#f5f5f5',
+                        color: '#333',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        transition: 'all 0.3s'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.backgroundColor = '#e0e0e0';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.backgroundColor = '#f5f5f5';
+                      }}
+                    >
+                      🔄 Limpar
+                    </button>
+
+                    <button
+                      onClick={handleCloseFiltrosModal}
+                      style={{
+                        padding: '12px 24px',
+                        background: 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        transition: 'all 0.3s',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.transform = 'translateY(-1px)';
+                        e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+                      }}
+                    >
+                      ✅ Aplicar
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

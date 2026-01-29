@@ -29,7 +29,7 @@ app.get("/linhas", async (req, res) => {
 
 // POST /linhas - cria nova linha
 app.post("/linhas", async (req, res) => {
-  const { numero, operadora, status } = req.body;
+  const { numero, operadora, status, data_ultima_recarga, data_vencimento_aproximada, fonte_status } = req.body;
 
   if (!numero || !operadora || !status) {
     return res.status(400).json({ error: "Campos obrigatórios ausentes" });
@@ -37,8 +37,8 @@ app.post("/linhas", async (req, res) => {
 
   try {
     const result = await pool.query(
-      "INSERT INTO linhas (numero, operadora, status) VALUES ($1, $2, $3) RETURNING *",
-      [numero, operadora, status]
+      "INSERT INTO linhas (numero, operadora, status, data_ultima_recarga, data_vencimento_aproximada, fonte_status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+      [numero, operadora, status, data_ultima_recarga || null, data_vencimento_aproximada || null, fonte_status || 'manual']
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -50,7 +50,7 @@ app.post("/linhas", async (req, res) => {
 // PUT /linhas/:id - atualiza uma linha
 app.put("/linhas/:id", async (req, res) => {
   const { id } = req.params;
-  const { numero, operadora, status } = req.body;
+  const { numero, operadora, status, data_ultima_recarga, data_vencimento_aproximada, fonte_status } = req.body;
 
   try {
     // Verifica se a linha existe
@@ -69,16 +69,23 @@ app.put("/linhas/:id", async (req, res) => {
     const result = await pool.query(
       `
       UPDATE linhas
-      SET numero = $1,
-          operadora = $2,
-          status = $3
-      WHERE id = $4
+      SET numero = COALESCE($1, numero),
+          operadora = COALESCE($2, operadora),
+          status = COALESCE($3, status),
+          data_ultima_recarga = COALESCE($4, data_ultima_recarga),
+          data_vencimento_aproximada = COALESCE($5, data_vencimento_aproximada),
+          fonte_status = COALESCE($6, fonte_status),
+          ultimo_status_confirmado = CURRENT_TIMESTAMP
+      WHERE id = $7
       RETURNING *
       `,
       [
-        numero || linha.numero,
-        operadora || linha.operadora,
-        status || linha.status,
+        numero,
+        operadora,
+        status,
+        data_ultima_recarga,
+        data_vencimento_aproximada,
+        fonte_status,
         id
       ]
     );

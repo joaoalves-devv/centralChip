@@ -1,68 +1,123 @@
-# =========================
-# Node.js
-# =========================
+# Dependências
 node_modules/
+vendor/
+bower_components/
+
+# Arquivos de ambiente
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
-# =========================
-# Environment variables
-# =========================
-.env
-.env.*
-!.env.example
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# =========================
-# Build / Dist
-# =========================
-dist/
-build/
-out/
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
 
-# =========================
-# Vite / React
-# =========================
-.vite/
-.vite-cache/
-
-# =========================
-# Docker
-# =========================
-docker/dokcer-compose.yml
-docker/dokcer-compose.override.yml
-docker/*.env
-
-
-# =========================
-# Logs
-# =========================
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-pnpm-debug.log*
-
-# =========================
-# OS / Editor
-# =========================
-.DS_Store
-Thumbs.db
+# Editor directories and files
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# =========================
-# Coverage / Tests
-# =========================
-coverage/
+# Sistema operacional
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# =========================
-# Temporary files
-# =========================
-*.tmp
-*.temp
-
-# === BUILD ======
+# Build outputs
 dist/
 build/
+.next/
+out/
+public/build/
+
+# Pacotes
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Banco de dados
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Testes
+.nyc_output/
+
+# TypeScript
+*.tsbuildinfo
+
+# Outros
+*.log
+logs/
+dump.rdb
+
+# Projetos específicos
+# Descomente as linhas abaixo se usar:
+# --------------------------------
+
+# # Angular
+# .angular/
+
+# # React
+# .eslintcache
+
+# # Vue
+# .vuepress/dist
+
+# # Svelte
+# .svelte-kit/
+
+# # Python
+# __pycache__/
+# *.py[cod]
+# *$py.class
+# *.so
+# .Python
+# env/
+
+# # Ruby
+# *.gem
+# .bundle/
+# .byebug_history
+
+# # Java
+# *.class
+# *.war
+# *.nar
+# *.ear
+# *.zip
+# *.tar.gz
+# *.rar
+
+# Arquivos temporários
+tmp/
+temp/

@@ -1,22 +1,20 @@
 import pg from 'pg';
 const { Pool } = pg;
+// ...existing code...
 
-// Validação das variáveis
-const required = ['DB_HOST', 'DB_PORT', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB'];
-const missing = required.filter(key => !process.env[key]);
-
-if (missing.length > 0) {
-  console.error('❌ Variáveis de ambiente faltando:', missing);
-  // Fallback para desenvolvimento
-  console.warn('⚠️ Usando valores padrão para desenvolvimento');
+// Suporte a múltiplos nomes de variáveis para compatibilidade
+function getEnv(key, fallback) {
+  return process.env[key] || process.env[key.replace('POSTGRES_', 'DB_')] || fallback;
 }
 
+// ...existing code...
+
 export const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT),
-  user: process.env.POSTGRES_USER,
-  password: process.env.POSTGRES_PASSWORD,
-  database: process.env.POSTGRES_DB,
+  host: getEnv('DB_HOST', 'localhost'),
+  port: parseInt(getEnv('DB_PORT', '5432')),
+  user: getEnv('DB_USER', 'postgres'),
+  password: getEnv('DB_PASSWORD', 'postgres'),
+  database: getEnv('DB_NAME', 'gestor_linhas'),
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
@@ -24,7 +22,7 @@ export const pool = new Pool({
 
 // Log seguro (não mostra senha)
 pool.on('connect', () => {
-  console.log(`✅ Conectado ao PostgreSQL como ${process.env.POSTGRES_USER || 'postgres'}@${process.env.DB_HOST || 'db'}`);
+  console.log(`✅ Conectado ao PostgreSQL como ${getEnv('DB_USER', 'postgres')}@${getEnv('DB_HOST', 'localhost')}`);
 });
 
 pool.on('error', (err) => {

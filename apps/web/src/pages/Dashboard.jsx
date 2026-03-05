@@ -5,8 +5,10 @@ import {
   deleteLinha,
   updateLinha,
 } from "../services/api";
+import {useNavigate} from "react-router-dom";
 
 export default function Dashboard() {
+  const navigator = useNavigate();
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -468,6 +470,14 @@ export default function Dashboard() {
     }
   };
 
+  const logout = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("userEmail");
+        navigator("/login");
+
+  }
+
+
   return (
     <div style={{
       padding: '20px',
@@ -576,14 +586,31 @@ export default function Dashboard() {
         overflow: 'hidden'
       }} className="dashboard-container">
         <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
           backgroundColor: '#2196F3',
           color: 'white',
           padding: '20px',
           textAlign: 'center'
         }} className="dashboard-header">
-          <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }}>
+          <h2 style={{ margin: '0 11em', fontSize: '24px', fontWeight: 'bold' }}>
             CentralChip - Gestor de Linhas Telefônicas
           </h2>
+          <button 
+          style={{
+            padding: '8px 18px',
+            color: '#2196F3',
+            backgroundColor: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          }
+        } 
+          onClick={logout}>Sair</button>
         </div>
 
         <div style={{ padding: '20px' }}>
@@ -627,7 +654,7 @@ export default function Dashboard() {
                 e.target.style.borderColor = '#ddd';
               }}
             >
-              🔎
+              Filtros
             </button>
 
             <input
@@ -920,7 +947,7 @@ export default function Dashboard() {
                             e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
                           }}
                         >
-                          ✏️ Editar
+                          Editar
                         </button>
 
                         <button
@@ -946,7 +973,7 @@ export default function Dashboard() {
                             e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
                           }}
                         >
-                          🗑️ Excluir
+                          Excluir 
                         </button>
                       </td>
                     </tr>
@@ -1258,9 +1285,9 @@ export default function Dashboard() {
                         onBlur={(e) => e.target.style.borderColor = '#ddd'}
                         required
                       >
-                        <option value="ativa">✅ Ativa</option>
-                        <option value="bloqueado">🚫 Bloqueado</option>
-                        <option value="cancelado">❌ Cancelado</option>
+                        <option value="ativa">Ativa</option>
+                        <option value="bloqueado">Bloqueado</option>
+                        <option value="cancelado">Cancelado</option>
                       </select>
                     </div>
 
@@ -1289,9 +1316,9 @@ export default function Dashboard() {
                         onFocus={(e) => e.target.style.borderColor = '#2196F3'}
                         onBlur={(e) => e.target.style.borderColor = '#ddd'}
                       >
-                        <option value="Manual">📝 Manual</option>
+                        <option value="Manual">Manual</option>
                         <option value="ussd">📱 USSD</option>
-                        <option value="sistema">⚙️ Sistema</option>
+                        <option value="sistema">Sistema</option>
                       </select>
                     </div>
                   </div>
@@ -1307,7 +1334,7 @@ export default function Dashboard() {
                         color: '#333',
                         fontSize: '14px'
                       }}>
-                        <span>📅 Última Recarga</span>
+                        <span>Última Recarga</span>
                         <span style={{
                           fontSize: '12px',
                           fontWeight: 'normal',
@@ -1358,7 +1385,7 @@ export default function Dashboard() {
                         color: '#333',
                         fontSize: '14px'
                       }}>
-                        ⏰ Vencimento Aproximado
+                        Vencimento Aproximado
                         <span
                           title="Calculado automaticamente com base na data de última recarga + 90 dias"
                           style={{
@@ -1375,7 +1402,7 @@ export default function Dashboard() {
                             cursor: 'help'
                           }}
                         >
-                          ℹ
+                          i
                         </span>
                       </label>
                       <div
@@ -1426,7 +1453,7 @@ export default function Dashboard() {
                         e.target.style.transform = 'translateY(0)';
                       }}
                     >
-                      ❌ Cancelar
+                     Cancelar
                     </button>
 
                     <button
@@ -1458,7 +1485,7 @@ export default function Dashboard() {
                         }
                       }}
                     >
-                      {loading ? '⏳ Salvando...' : (editId ? '✅ Atualizar' : '➕ Criar')}
+                      {loading ? 'Salvando...' : (editId ? 'Atualizar' : 'Criar')}
                     </button>
                   </div>
                 </form>
@@ -1506,7 +1533,7 @@ export default function Dashboard() {
                     fontSize: '24px',
                     fontWeight: 'bold'
                   }}>
-                    🔎 Filtros
+                     Filtros
                   </h3>
                   <button
                     onClick={handleCloseFiltrosModal}
@@ -1565,9 +1592,9 @@ export default function Dashboard() {
                       onBlur={(e) => e.target.style.borderColor = '#ddd'}
                     >
                       <option value="todos">Todos</option>
-                      <option value="ativa">✅ Ativa</option>
-                      <option value="suspensa">⚠️ Suspensa</option>
-                      <option value="cancelada">❌ Cancelada</option>
+                      <option value="ativa">Ativa</option>
+                      <option value="suspensa">Suspensa</option>
+                      <option value="cancelada">Cancelada</option>
                     </select>
                   </div>
 
@@ -1636,7 +1663,7 @@ export default function Dashboard() {
                         e.target.style.backgroundColor = '#f5f5f5';
                       }}
                     >
-                      🔄 Limpar
+                      Limpar
                     </button>
 
                     <button
@@ -1662,7 +1689,7 @@ export default function Dashboard() {
                         e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
                       }}
                     >
-                      ✅ Aplicar
+                      Aplicar
                     </button>
                   </div>
                 </div>
